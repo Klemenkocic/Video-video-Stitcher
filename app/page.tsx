@@ -1,65 +1,227 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
+import Header from "@/components/Header";
+import InstructionsSidebar from "@/components/InstructionsSidebar";
+import LocationBlock from "@/components/LocationBlock";
+import PromptEditor from "@/components/PromptEditor";
+import GenerateButton from "@/components/GenerateButton";
+import LoadingOverlay from "@/components/LoadingOverlay";
+import ResultModal from "@/components/ResultModal";
+import ErrorToast from "@/components/ErrorToast";
+import MainCanvas from "@/components/MainCanvas";
+import { DEFAULT_PROMPT } from "@/lib/constants";
+import type { UploadedImage } from "@/lib/types";
+
+const MAX_RETRIES = 2;
+
+const getUserFriendlyError = (error: string): string => {
+  const lower = error.toLowerCase();
+  if (lower.includes("timeout")) {
+    return "The request took too long. Please try again.";
+  }
+  if (lower.includes("rate limit")) {
+    return "Too many requests. Please wait a moment and try again.";
+  }
+  if (lower.includes("invalid image") || lower.includes("image")) {
+    return "There was a problem with your images. Try different photos.";
+  }
+  return "Something went wrong. Please try again.";
+};
 
 export default function Home() {
+  const [firstImage, setFirstImage] = useState<UploadedImage | null>(null);
+  const [secondImage, setSecondImage] = useState<UploadedImage | null>(null);
+  const [isUploadingFirst, setIsUploadingFirst] = useState(false);
+  const [isUploadingSecond, setIsUploadingSecond] = useState(false);
+
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
+  const isPromptModified = prompt !== DEFAULT_PROMPT;
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const canGenerate = Boolean(firstImage?.url && secondImage?.url);
+
+  useEffect(() => {
+    return () => {
+      if (firstImage?.preview) URL.revokeObjectURL(firstImage.preview);
+      if (secondImage?.preview) URL.revokeObjectURL(secondImage.preview);
+    };
+  }, [firstImage?.preview, secondImage?.preview]);
+
+  const handleUpload = async (
+    file: File,
+    setImage: typeof setFirstImage,
+    setIsUploading: typeof setIsUploadingFirst
+  ) => {
+    setIsUploading(true);
+    setError(null);
+    try {
+      const preview = URL.createObjectURL(file);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setImage((prev) => {
+        if (prev?.preview) URL.revokeObjectURL(prev.preview);
+        return {
+          url: data.url,
+          preview,
+          name: file.name,
+        };
+      });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to upload image";
+      setError(getUserFriendlyError(message));
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemove = (
+    image: UploadedImage | null,
+    setImage: typeof setFirstImage
+  ) => {
+    if (image?.preview) {
+      URL.revokeObjectURL(image.preview);
+    }
+    setImage(null);
+  };
+
+  const handleGenerate = async () => {
+    if (!canGenerate || isGenerating) return;
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startImageUrl: firstImage!.url,
+          endImageUrl: secondImage!.url,
+          prompt,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Generation failed");
+      }
+
+      setVideoUrl(data.videoUrl);
+      setRetryCount(0);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to create your memory";
+      setError(getUserFriendlyError(message));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (firstImage?.preview) URL.revokeObjectURL(firstImage.preview);
+    if (secondImage?.preview) URL.revokeObjectURL(secondImage.preview);
+    setFirstImage(null);
+    setSecondImage(null);
+    setPrompt(DEFAULT_PROMPT);
+    setVideoUrl(null);
+    setError(null);
+    setRetryCount(0);
+  };
+
+  const handleRetry = () => {
+    if (retryCount < MAX_RETRIES) {
+      setRetryCount((count) => count + 1);
+      setError(null);
+      handleGenerate();
+    } else {
+      setError(
+        "Still having trouble. Please try different images or try again later."
+      );
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text)]">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-10 pt-4">
+        <Header />
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <MainCanvas>
+            <div className="rounded-3xl border border-[var(--border)] bg-white p-4 shadow-sm lg:p-6">
+              <LocationBlock
+                label="Where it begins"
+                image={firstImage}
+                onUpload={(file) =>
+                  handleUpload(file, setFirstImage, setIsUploadingFirst)
+                }
+                onRemove={() => handleRemove(firstImage, setFirstImage)}
+                isUploading={isUploadingFirst}
+              />
+
+              <div className="my-6">
+                <PromptEditor
+                  value={prompt}
+                  onChange={setPrompt}
+                  onReset={() => setPrompt(DEFAULT_PROMPT)}
+                  isModified={isPromptModified}
+                />
+              </div>
+
+              <LocationBlock
+                label="Where it ends"
+                image={secondImage}
+                onUpload={(file) =>
+                  handleUpload(file, setSecondImage, setIsUploadingSecond)
+                }
+                onRemove={() => handleRemove(secondImage, setSecondImage)}
+                isUploading={isUploadingSecond}
+              />
+            </div>
+          </MainCanvas>
+
+          <InstructionsSidebar />
+        </div>
+
+        <div className="lg:w-[65%]">
+          <GenerateButton
+            canGenerate={canGenerate}
+            isGenerating={isGenerating}
+            onClick={handleGenerate}
+          />
+        </div>
+      </div>
+
+      <LoadingOverlay isVisible={isGenerating} />
+
+      {videoUrl && (
+        <ResultModal
+          videoUrl={videoUrl}
+          onClose={() => setVideoUrl(null)}
+          onCreateAnother={handleReset}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+
+      {error && (
+        <ErrorToast
+          message={error}
+          onDismiss={() => setError(null)}
+          onRetry={handleRetry}
+        />
+      )}
     </div>
   );
 }
