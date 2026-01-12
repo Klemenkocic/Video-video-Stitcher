@@ -1,4 +1,14 @@
+import 'dart:developer' as developer;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../core/constants/app_constants.dart';
+
+part 'fal_service.g.dart';
+
+@riverpod
+FalService falService(FalServiceRef ref) {
+  return FalService();
+}
 
 class FalService {
   /// Submits a video generation request to the backend.
@@ -9,12 +19,12 @@ class FalService {
   }) async {
     try {
       final response = await Supabase.instance.client.functions.invoke(
-        'generate-video', // Edge Function
+        AppConstants.functionGenerateVideo,
         body: {
           'action': 'generate',
           'prompt': prompt,
           'imageUrl': imageUrl,
-          'tailImageUrl': tailImageUrl, // Matches JSON key in Edge Function
+          'tailImageUrl': tailImageUrl,
         },
       );
 
@@ -26,6 +36,7 @@ class FalService {
       
       return requestId;
     } catch (e) {
+      developer.log('Video Generation Error', error: e, name: 'FalService');
       throw Exception('Video Generation Error: $e');
     }
   }
@@ -38,7 +49,7 @@ class FalService {
       
       try {
         final response = await Supabase.instance.client.functions.invoke(
-          'generate-video',
+          AppConstants.functionGenerateVideo,
           body: {
             'action': 'check_status',
             'requestId': requestId,
@@ -57,7 +68,7 @@ class FalService {
           throw Exception('Video generation failed: ${data['error']}');
         }
       } catch (e) {
-         print('Polling transient error: $e'); // Don't crash immediately on network blip
+         developer.log('Polling transient error', error: e, name: 'FalService');
       }
       
       attempts++;

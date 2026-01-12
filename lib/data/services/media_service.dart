@@ -1,7 +1,15 @@
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:flutter/material.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/theme/app_theme.dart';
+
+part 'media_service.g.dart';
+
+@riverpod
+MediaService mediaService(MediaServiceRef ref) {
+  return MediaService();
+}
 
 class MediaService {
   final ImagePicker _picker = ImagePicker();
@@ -12,10 +20,13 @@ class MediaService {
     return image.path;
   }
 
-  Future<String?> cropImage({required String path}) async {
+  Future<String?> cropImage({
+    required String path,
+    CropAspectRatio? aspectRatio,
+  }) async {
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: path,
-      aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 9),
+      aspectRatio: aspectRatio ?? const CropAspectRatio(ratioX: 16, ratioY: 9),
       uiSettings: [
         AndroidUiSettings(
             toolbarTitle: 'Crop Image',

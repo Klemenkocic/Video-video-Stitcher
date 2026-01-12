@@ -28,32 +28,7 @@ serve(async (req) => {
     try {
         const { amount, currency = 'eur' } = await req.json()
 
-        // 1. Create a Customer (Optional, simplified for this demo)
-        // In a real app, you'd check if the user already has a stripe_customer_id in your DB
-        // and reuse it. For now, we create an ephemeral setup for the sheet.
-
-        // 2. Create an Ephemeral Key
-        // We need a customer ID for this. Let's create a guest customer or use a hardcoded one for testing.
-        // Ideally, pass the user's email from the auth context.
-
-        // For specific PaymentSheet flow:
-        // https://stripe.com/docs/payments/accept-a-payment?platform=web&ui=payment-sheet
-
-        // Let's create a customer for this session
-        const customer = await stripe.customers.create()
-        const ephemeralKey = await stripe.ephemeralKeys.create(
-            { customer: customer.id },
-            { apiVersion: '2022-11-15' }
-        )
-
-        // 3. Create the PaymentIntent
-        // Amount should be in cents (e.g. 1000 = $10.00)
-
-        // Extract user token from Authorization header (Bearer TOKEN)
-        const authHeader = req.headers.get('Authorization')
-        const token = authHeader?.replace('Bearer ', '')
-
-        // Get user ID from Supabase Auth (safe way)
+        // 1. Get user from Supabase Auth
         const supabaseClient = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -61,12 +36,45 @@ serve(async (req) => {
         )
         const { data: { user } } = await supabaseClient.auth.getUser()
 
+        if (!user) throw new Error('User not authenticated');
+
+        // 2. Check for existing customer ID
+        const { data: profile } = await supabaseClient
+            .from('profiles')
+            .select('stripe_customer_id')
+            .eq('id', user.id)
+            .single()
+
+        let customerId = profile?.stripe_customer_id
+
+        // 3. Create Customer if needed
+        if (!customerId) {
+            const customer = await stripe.customers.create({
+                email: user.email,
+                metadata: { supabase_uid: user.id }
+            })
+            customerId = customer.id
+
+            // Update profile
+            await supabaseClient
+                .from('profiles')
+                .update({ stripe_customer_id: customerId })
+                .eq('id', user.id)
+        }
+
+        // 4. Create Ephemeral Key
+        const ephemeralKey = await stripe.ephemeralKeys.create(
+            { customer: customerId },
+            { apiVersion: '2022-11-15' }
+        )
+
+        // 5. Create PaymentIntent
         const paymentIntent = await stripe.paymentIntents.create({
             amount: amount,
             currency: currency,
-            customer: customer.id,
+            customer: customerId,
             metadata: {
-                user_id: user?.id // Pass verified user ID
+                user_id: user.id
             },
             automatic_payment_methods: {
                 enabled: true,
@@ -78,7 +86,7 @@ serve(async (req) => {
             JSON.stringify({
                 paymentIntent: paymentIntent.client_secret,
                 ephemeralKey: ephemeralKey.secret,
-                customer: customer.id,
+                customer: customerId,
                 publishableKey: Deno.env.get('STRIPE_PUBLISHABLE_KEY'),
             }),
             {

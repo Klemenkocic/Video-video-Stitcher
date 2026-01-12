@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'video_library_provider.g.dart';
@@ -16,27 +17,35 @@ class VideoItem {
     required this.title,
     required this.createdAt,
   });
+  
+  factory VideoItem.fromJson(Map<String, dynamic> json) {
+    return VideoItem(
+      id: json['id'],
+      url: json['video_url'] ?? '',
+      thumbnailUrl: json['video_thumbnail_url'],
+      title: json['title'] ?? 'Untitled',
+      createdAt: DateTime.parse(json['created_at']),
+    );
+  }
 }
 
 @riverpod
 class VideoLibrary extends _$VideoLibrary {
   @override
-  List<VideoItem> build() {
-    return [];
-  }
+  FutureOr<List<VideoItem>> build() async {
+    final client = Supabase.instance.client;
+    final userId = client.auth.currentUser?.id;
+    
+    if (userId == null) return [];
 
-  void addVideo(String url, {String? thumbnailUrl, String? title}) {
-    final video = VideoItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      url: url,
-      thumbnailUrl: thumbnailUrl,
-      title: title ?? 'Travel Video ${state.length + 1}',
-      createdAt: DateTime.now(),
-    );
-    state = [video, ...state]; // Add to beginning
-  }
+    final response = await client
+        .from('projects')
+        .select()
+        .eq('user_id', userId)
+        .eq('status', 'completed') // Only completed videos
+        .order('created_at', ascending: false);
 
-  void removeVideo(String id) {
-    state = state.where((v) => v.id != id).toList();
+    final data = response as List<dynamic>;
+    return data.map((json) => VideoItem.fromJson(json)).toList();
   }
 }

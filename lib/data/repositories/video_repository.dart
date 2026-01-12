@@ -9,8 +9,8 @@ class VideoRepository {
   VideoRepository(this._falService);
 
   Future<String> generateTransition({
-    required String firstImagePath,
-    required String secondImagePath,
+    required String firstImageUrl,
+    required String secondImageUrl,
     required String prompt,
   }) async {
     // Images should already be uploaded to Supabase storage or Fal storage
@@ -18,8 +18,8 @@ class VideoRepository {
 
     // Submit generation job
     final requestId = await _falService.generateVideo(
-      imageUrl: firstImagePath,  // Expected to be a URL
-      tailImageUrl: secondImagePath,  // Expected to be a URL
+      imageUrl: firstImageUrl,  // Expected to be a URL
+      tailImageUrl: secondImageUrl,  // Expected to be a URL
       prompt: prompt,
     );
 
@@ -30,5 +30,6 @@ class VideoRepository {
 
 @riverpod
 VideoRepository videoRepository(VideoRepositoryRef ref) {
-  return VideoRepository(FalService());
+  final falService = ref.watch(falServiceProvider);
+  return VideoRepository(falService);
 }

@@ -1,27 +1,27 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'video_repository.dart';
+part of 'download_service.dart';
 
 // **************************************************************************
 // RiverpodGenerator
 // **************************************************************************
 
-String _$videoRepositoryHash() => r'8f3d2549aa67bfde1a527319349e2c9be4fe6d55';
+String _$downloadServiceHash() => r'c94a7343d503a57a4ad67d5550df6e0658f8a316';
 
-/// See also [videoRepository].
-@ProviderFor(videoRepository)
-final videoRepositoryProvider = AutoDisposeProvider<VideoRepository>.internal(
-  videoRepository,
-  name: r'videoRepositoryProvider',
+/// See also [downloadService].
+@ProviderFor(downloadService)
+final downloadServiceProvider = AutoDisposeProvider<DownloadService>.internal(
+  downloadService,
+  name: r'downloadServiceProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$videoRepositoryHash,
+      : _$downloadServiceHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef VideoRepositoryRef = AutoDisposeProviderRef<VideoRepository>;
+typedef DownloadServiceRef = AutoDisposeProviderRef<DownloadService>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

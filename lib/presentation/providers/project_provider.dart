@@ -1,9 +1,10 @@
+import 'dart:developer' as developer;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/node_model.dart';
 import '../../data/repositories/video_repository.dart';
-import '../../data/repositories/credit_repository.dart';
-import '../../core/constants/app_constants.dart';
+import '../../data/services/billing_service.dart';
+import '../../core/config/billing_constants.dart';
 import 'video_library_provider.dart';
 
 part 'project_provider.g.dart';
@@ -18,16 +19,21 @@ class ProjectNotifier extends _$ProjectNotifier {
   Future<void> generateVideo() async {
     if (!isValidSequence) return;
 
-    // Check credits first
-    final creditRepo = ref.read(creditRepositoryProvider);
-    final hasSufficentCredits = await creditRepo.deductCredits(
-      AppConstants.simpleVideoCost,
+    // Check and deduct credits via billing service
+    // In dev mode, this will bypass credit checks
+    final billingService = ref.read(billingServiceProvider);
+    final hasSufficientCredits = await billingService.deductCredits(
+      BillingConstants.videoGenerationCost,
       'Video Generation: ${state.title}',
     );
 
-    if (!hasSufficentCredits) {
-       state = state.copyWith(status: ProjectStatus.insufficientCredits);  
-       return;
+    if (!hasSufficientCredits) {
+      developer.log(
+        'Insufficient credits for video generation',
+        name: 'ProjectProvider',
+      );
+      state = state.copyWith(status: ProjectStatus.insufficientCredits);
+      return;
     }
 
     // Update status to generating
@@ -35,34 +41,45 @@ class ProjectNotifier extends _$ProjectNotifier {
 
     try {
       final repo = ref.read(videoRepositoryProvider);
-      
+
       // Extract data from nodes
       final startNode = state.nodes[0];
       final textNode = state.nodes[1];
       final endNode = state.nodes[2];
 
+      developer.log(
+        'Starting video generation with Fal API',
+        name: 'ProjectProvider',
+      );
+
       final videoUrl = await repo.generateTransition(
-        firstImagePath: startNode.content,
-        secondImagePath: endNode.content,
+        firstImageUrl: startNode.content,
+        secondImageUrl: endNode.content,
         prompt: textNode.content,
       );
 
-      // Save to video library
-      ref.read(videoLibraryProvider.notifier).addVideo(
-        videoUrl,
-        thumbnailUrl: startNode.content,
-        title: 'Travel Video',
+      developer.log(
+        'Video generation completed: $videoUrl',
+        name: 'ProjectProvider',
       );
+
+      // Refresh video library to show new video
+      ref.invalidate(videoLibraryProvider);
 
       // Success
       state = state.copyWith(
         status: ProjectStatus.completed,
         videoUrl: videoUrl,
-        videoThumbnailUrl: startNode.content, 
+        videoThumbnailUrl: startNode.content,
       );
-    } catch (e) {
+    } catch (e, stack) {
+      developer.log(
+        'Video generation failed',
+        error: e,
+        stackTrace: stack,
+        name: 'ProjectProvider',
+      );
       state = state.copyWith(status: ProjectStatus.failed);
-      print('Generation Error: $e');
     }
   }
 

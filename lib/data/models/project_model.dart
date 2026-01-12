@@ -82,4 +82,13 @@ class Project {
       updatedAt: DateTime.now(),
     );
   }
+
+  // Valid sequence: Image -> Text -> Image
+  bool get isValidSequence {
+    if (nodes.length != 3) return false;
+    if (nodes[0].type != NodeType.image) return false;
+    if (nodes[1].type != NodeType.text) return false;
+    if (nodes[2].type != NodeType.image) return false;
+    return true;
+  }
 }

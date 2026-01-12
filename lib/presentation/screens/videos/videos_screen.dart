@@ -1,33 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:dio/dio.dart';
 import 'dart:io';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/video_library_provider.dart';
+import '../../../data/services/download_service.dart';
 
 class VideosScreen extends ConsumerWidget {
   const VideosScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final videos = ref.watch(videoLibraryProvider);
+    final videosAsync = ref.watch(videoLibraryProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.black,
       body: SafeArea(
         bottom: false,
-        child: videos.isEmpty
-            ? const _EmptyState()
-            : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
-                itemCount: videos.length,
-                itemBuilder: (context, index) {
-                  final video = videos[index];
-                  return _VideoCard(video: video);
-                },
-              ),
+        child: videosAsync.when(
+          data: (videos) => videos.isEmpty
+              ? const _EmptyState()
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
+                  itemCount: videos.length,
+                  itemBuilder: (context, index) {
+                    final video = videos[index];
+                    return _VideoCard(video: video);
+                  },
+                ),
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: AppTheme.white),
+          ),
+          error: (error, stack) => Center(
+            child: Text(
+              'Error loading videos: $error',
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -68,35 +77,33 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _VideoCard extends StatefulWidget {
+class _VideoCard extends ConsumerStatefulWidget {
   final VideoItem video;
 
   const _VideoCard({required this.video});
 
   @override
-  State<_VideoCard> createState() => _VideoCardState();
+  ConsumerState<_VideoCard> createState() => _VideoCardState();
 }
 
-class _VideoCardState extends State<_VideoCard> {
+class _VideoCardState extends ConsumerState<_VideoCard> {
   bool _isDownloading = false;
 
   Future<void> _downloadAndShare() async {
     setState(() => _isDownloading = true);
     
     try {
-      // Download video to temp directory
-      final dio = Dio();
-      final tempDir = await getTemporaryDirectory();
-      final fileName = 'traverse_video_${DateTime.now().millisecondsSinceEpoch}.mp4';
-      final filePath = '${tempDir.path}/$fileName';
+      final downloadService = ref.read(downloadServiceProvider);
       
-      await dio.download(widget.video.url, filePath);
+      // Download
+      final filePath = await downloadService.downloadVideo(widget.video.url);
       
-      // Share the file
-      await Share.shareXFiles(
-        [XFile(filePath)],
-        text: 'My Traverse travel video',
+      // Share
+      await downloadService.shareFile(
+        filePath, 
+        text: 'My Traverse travel video: ${widget.video.title}',
       );
+
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -127,8 +134,8 @@ class _VideoCardState extends State<_VideoCard> {
             child: AspectRatio(
               aspectRatio: 16 / 9,
               child: widget.video.thumbnailUrl != null
-                  ? Image.file(
-                      File(widget.video.thumbnailUrl!),
+                  ? Image.network( // Changed to Image.network since URLs are from DB
+                      widget.video.thumbnailUrl!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => _placeholderThumbnail(),
                     )

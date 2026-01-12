@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -19,7 +20,7 @@ class StripeService {
     try {
       // 1. Call Edge Function to get secrets
       final response = await Supabase.instance.client.functions.invoke(
-        'payment-sheet',
+        AppConstants.functionPaymentSheet,
         body: {'amount': amountInCents, 'currency': 'eur'},
       );
       
@@ -55,7 +56,7 @@ class StripeService {
       );
       return true;
     } catch (e) {
-      print('Stripe Init Error: $e');
+      developer.log('Stripe Init Error', error: e, name: 'StripeService');
       return false;
     }
   }
@@ -65,15 +66,13 @@ class StripeService {
       await Stripe.instance.presentPaymentSheet();
       return true;
     } on StripeException catch (e) {
-      print('Payment Cancelled/Failed: ${e.error.localizedMessage}');
+      developer.log('Payment Cancelled/Failed', error: e.error.localizedMessage, name: 'StripeService');
       return false;
     } catch (e) {
-      print('Payment Error: $e');
+      developer.log('Payment Error', error: e, name: 'StripeService');
       return false;
     }
   }
-
-
 }
 
 @riverpod

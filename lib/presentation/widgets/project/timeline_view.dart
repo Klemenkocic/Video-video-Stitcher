@@ -23,13 +23,7 @@ class TimelineView extends ConsumerWidget {
     final notifier = ref.read(projectNotifierProvider.notifier);
     final isGenerating = project.status == ProjectStatus.generating;
     
-    // Validation: Image -> Text -> Image with non-empty content
-    final isValid = project.nodes.length == 3 && 
-                    project.nodes[0].type == NodeType.image && 
-                    project.nodes[0].content.isNotEmpty &&
-                    project.nodes[1].type == NodeType.text &&
-                    project.nodes[2].type == NodeType.image &&
-                    project.nodes[2].content.isNotEmpty;
+    final isValid = project.isValidSequence;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
